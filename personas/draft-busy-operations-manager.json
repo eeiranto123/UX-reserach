@@ -1,0 +1,38 @@
+{
+  "id": "draft-busy-operations-manager",
+  "status": "draft",
+  "name": "Maya, the busy operations manager",
+  "summary": "PLACEHOLDER persona until our research-based personas are ready. A time-pressed, non-technical professional who uses the product a few times a week to get one specific job done and wants to get back to their day.",
+  "role": "Operations manager at a mid-sized company (about 200 employees)",
+  "demographics": {
+    "ageRange": "35-45",
+    "location": "Europe",
+    "language": "English (second language)"
+  },
+  "goals": [
+    "Finish the task quickly and correctly, without needing to contact support",
+    "Feel confident the action actually worked (clear confirmation)",
+    "Avoid making mistakes that would need explaining to their manager"
+  ],
+  "frustrations": [
+    "Jargon and internal product terminology they don't recognise",
+    "Having to hunt through menus for things that should be obvious",
+    "Unexpected extra steps, pop-ups or forced sign-ups",
+    "Unclear error messages that don't say how to fix the problem"
+  ],
+  "behaviors": [
+    "Scans pages rather than reading them; relies on headings, button labels and search",
+    "Usually tries the most obvious-looking link or button first",
+    "Rarely reads help documentation unless completely stuck",
+    "Often multitasking and interrupted, so prefers short flows",
+    "Will use the browser back button when lost"
+  ],
+  "techComfort": 3,
+  "patience": 2,
+  "domainKnowledge": "Understands the business problem the product solves, but has no knowledge of how the product is organised internally or what its features are called.",
+  "accessibilityNeeds": [],
+  "device": "desktop",
+  "evidence": [],
+  "owner": "UX Research",
+  "updatedAt": "2026-11-16"
+}
