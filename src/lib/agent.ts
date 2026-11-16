@@ -3,8 +3,9 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import fs from "fs/promises";
 import path from "path";
 import { BrowserSession, type Observation } from "./browser";
-import { config, isAllowedUrl } from "./config";
+import { config } from "./config";
 import { personaProfile } from "./personas";
+import { urlPolicy } from "./products";
 import { screenshotsDir } from "./store";
 import {
   DebriefSchema,
@@ -12,6 +13,7 @@ import {
   type Debrief,
   type Evaluation,
   type Persona,
+  type Product,
   type Step,
   type StudyInput,
 } from "./types";
@@ -161,8 +163,21 @@ const TOOLS: Anthropic.Beta.BetaTool[] = [
   },
 ];
 
-function systemPrompt(persona: Persona): string {
-  return `You are taking part in a usability test as a synthetic research participant. You role-play the persona below and use a real web browser through tools.
+function systemPrompt(persona: Persona, product: Product): string {
+  const live =
+    product.environment === "live"
+      ? `
+
+IMPORTANT - this is the LIVE public ${product.name} website with real customers and real orders:
+- Never place an order, start a payment, book a service, create an account, subscribe to a newsletter or submit any form that sends personal details.
+- Browsing, searching, filtering, comparing and adding items to the cart are fine. If the task would require checkout or payment, stop at that point and call finish, describing where you stopped and whether you would have been able to continue.
+- Checkout and payment pages are blocked; if a click is blocked, treat it as the end of what you are allowed to do.`
+      : "";
+  return systemPromptBase(persona, product) + live;
+}
+
+function systemPromptBase(persona: Persona, product: Product): string {
+  return `You are taking part in a usability test of the ${product.name} website as a synthetic research participant. You role-play the persona below and use a real web browser through tools. The site may be in a language other than English (browser locale: ${product.locale}); react to it the way this persona realistically would, but write your thoughts and debrief in English.
 
 <persona>
 ${personaProfile(persona)}
@@ -222,14 +237,20 @@ export async function runPersonaSession(opts: {
   studyId: string;
   sessionId: string;
   persona: Persona;
+  product: Product;
   input: StudyInput;
   callbacks: SessionCallbacks;
 }): Promise<SessionResult> {
-  const { studyId, sessionId, persona, input, callbacks } = opts;
+  const { studyId, sessionId, persona, product, input, callbacks } = opts;
   const shotDir = screenshotsDir(studyId);
   await fs.mkdir(shotDir, { recursive: true });
 
-  const browser = await BrowserSession.create(persona.device);
+  const browser = await BrowserSession.create({
+    device: persona.device,
+    policy: urlPolicy(product),
+    locale: product.locale,
+    timezone: product.timezone,
+  });
   let stepIndex = 0;
 
   const record = async (
@@ -276,7 +297,7 @@ export async function runPersonaSession(opts: {
         max_tokens: 16000,
         betas: BETAS,
         fallbacks: "default",
-        system: systemPrompt(persona),
+        system: systemPrompt(persona, product),
         tools: TOOLS,
         tool_choice: { type: "auto", disable_parallel_tool_use: true },
         thinking: { type: "adaptive" },
@@ -424,7 +445,7 @@ async function performAction(browser: BrowserSession, name: string, args: Record
       return browser.goBack();
     case "go_to_url": {
       const url = String(args.url ?? "");
-      if (!isAllowedUrl(url)) throw new Error("That address is outside the test site and was blocked.");
+      if (!browser.isAllowed(url)) throw new Error("That address is outside the allowed test scope and was blocked.");
       return browser.goto(url);
     }
     default:

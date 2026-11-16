@@ -1,0 +1,11 @@
+{
+  "id": "k-rauta",
+  "name": "K-Rauta",
+  "environment": "live",
+  "defaultUrl": "https://www.k-rauta.fi/",
+  "allowedHosts": ["k-rauta.fi"],
+  "locale": "fi-FI",
+  "timezone": "Europe/Helsinki",
+  "blockedUrlPatterns": ["checkout", "kassa", "maksu", "payment"],
+  "notes": "Live public website. Sessions must not place orders, pay or submit real personal data."
+}

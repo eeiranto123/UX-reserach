@@ -33,7 +33,13 @@ export function StudyView({ initial }: { initial: Study }) {
     <>
       <div className="spread">
         <h1>{study.input.title}</h1>
-        <StatusBadge status={study.status} />
+        <div className="row">
+          {study.product && (
+            <StatusBadge status={study.product.environment === "live" ? "partial" : "queued"}
+              label={`${study.product.name} · ${study.product.environment}`} />
+          )}
+          <StatusBadge status={study.status} />
+        </div>
       </div>
       <p className="muted small">
         <a href={study.input.targetUrl} target="_blank" rel="noreferrer">{study.input.targetUrl}</a> · created{" "}

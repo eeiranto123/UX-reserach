@@ -1,5 +1,5 @@
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
-import { isAllowedUrl } from "./config";
+import { isAllowedUrl, type UrlPolicy } from "./config";
 
 const VIEWPORTS = {
   desktop: { width: 1280, height: 800 },
@@ -84,23 +84,40 @@ export class BrowserSession {
     private context: BrowserContext,
     readonly page: Page,
     readonly device: "desktop" | "mobile",
+    private policy: UrlPolicy,
+    private nav: { blockedUrl?: string },
   ) {}
 
-  static async create(device: "desktop" | "mobile"): Promise<BrowserSession> {
+  static async create(opts: {
+    device: "desktop" | "mobile";
+    policy: UrlPolicy;
+    locale: string;
+    timezone: string;
+  }): Promise<BrowserSession> {
+    const { device, policy } = opts;
     const browser = await getBrowser();
     const context = await browser.newContext({
       viewport: VIEWPORTS[device],
       isMobile: device === "mobile",
       hasTouch: device === "mobile",
       deviceScaleFactor: 1,
-      locale: "en-US",
+      locale: opts.locale,
+      timezoneId: opts.timezone,
     });
-    // Block top-level navigations to hosts outside the allowlist. Sub-resources
+    // Block top-level navigations outside the product's allowed hosts, and any
+    // navigation (including iframes) to blocked URLs like checkout. Sub-resources
     // (CDNs, fonts, analytics) still load so pages render normally.
+    const nav: { blockedUrl?: string } = {};
     await context.route("**/*", (route) => {
       const req = route.request();
-      if (req.isNavigationRequest() && req.frame() === req.frame().page().mainFrame()) {
-        if (!isAllowedUrl(req.url())) return route.abort("blockedbyclient");
+      if (req.isNavigationRequest()) {
+        const isMain = req.frame() === req.frame().page().mainFrame();
+        const lower = req.url().toLowerCase();
+        const blockedPattern = policy.blockedUrlPatterns.some((b) => b && lower.includes(b.toLowerCase()));
+        if (blockedPattern || (isMain && !isAllowedUrl(req.url(), policy))) {
+          if (isMain) nav.blockedUrl = req.url();
+          return route.abort("blockedbyclient");
+        }
       }
       return route.continue();
     });
@@ -108,26 +125,49 @@ export class BrowserSession {
     page.setDefaultTimeout(10_000);
     // Never let native dialogs block the session; accept confirms, note it later.
     page.on("dialog", (d) => d.accept().catch(() => undefined));
-    return new BrowserSession(context, page, device);
+    return new BrowserSession(context, page, device, policy, nav);
   }
 
   async close(): Promise<void> {
     await this.context.close().catch(() => undefined);
   }
 
-  private async settle(): Promise<void> {
+  private async waitForLoad(): Promise<void> {
     await this.page.waitForLoadState("domcontentloaded", { timeout: 10_000 }).catch(() => undefined);
     await this.page.waitForLoadState("networkidle", { timeout: 3_000 }).catch(() => undefined);
   }
 
+  /**
+   * Waits for the page to load. If the action triggered a blocked navigation
+   * (checkout, payment, another site), return to the previous page and report it.
+   */
+  private async settle(): Promise<void> {
+    await this.waitForLoad();
+    const blocked = this.nav.blockedUrl;
+    if (!blocked) return;
+    this.nav.blockedUrl = undefined;
+    if (this.page.url().startsWith("chrome-error://")) {
+      await this.page.goBack({ waitUntil: "domcontentloaded" }).catch(() => undefined);
+      await this.waitForLoad();
+    }
+    throw new Error(
+      `Blocked: ${blocked} is not allowed in this test (checkout/payment pages and other websites are off limits). You are still on the previous page.`,
+    );
+  }
+
   async goto(url: string): Promise<void> {
-    if (!isAllowedUrl(url)) throw new Error(`Navigation blocked: ${url} is not an allowed test host.`);
+    if (!isAllowedUrl(url, this.policy)) throw new Error(`Navigation blocked: ${url} is outside the allowed test scope.`);
     await this.page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
     await this.settle();
   }
 
   private locator(ref: number) {
     return this.page.locator(`[data-uxr-ref="${ref}"]`).first();
+  }
+
+  /** Whether `url` is inside this session's allowed test scope. */
+  isAllowed(url: string): boolean {
+    return isAllowedUrl(url, this.policy);
   }
 
   async click(ref: number): Promise<void> {

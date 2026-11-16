@@ -2,9 +2,10 @@ import { randomUUID } from "crypto";
 import { runPersonaSession } from "./agent";
 import { config } from "./config";
 import { getPersona } from "./personas";
+import { studyTitle } from "./title";
 import { listStudies, loadStudy, saveStudy, updateStudy } from "./store";
 import { synthesizeStudy } from "./synthesis";
-import type { Session, Study, StudyInput } from "./types";
+import type { Product, Session, Study, StudyInput } from "./types";
 
 /**
  * In-process job queue for the MVP. Each persona x run is one job; up to
@@ -21,7 +22,9 @@ const g = globalThis as unknown as {
 };
 const queue = (g.__uxrQueue ??= { pending: [], active: 0, recovered: false });
 
-export async function createStudy(input: StudyInput, createdBy?: string): Promise<Study> {
+export async function createStudy(input: StudyInput, product: Product, createdBy?: string): Promise<Study> {
+  const now = new Date();
+  input = { ...input, productId: product.id, title: studyTitle(product, now) };
   const sessions: Session[] = [];
   for (const personaId of input.personaIds) {
     const persona = await getPersona(personaId);
@@ -40,8 +43,9 @@ export async function createStudy(input: StudyInput, createdBy?: string): Promis
   }
   const study: Study = {
     id: `${new Date().toISOString().slice(0, 10)}-${randomUUID().slice(0, 8)}`,
-    createdAt: new Date().toISOString(),
+    createdAt: now.toISOString(),
     createdBy,
+    product,
     input,
     status: "queued",
     sessions,
@@ -106,6 +110,7 @@ async function runJob({ studyId, sessionId }: Job): Promise<void> {
       studyId,
       sessionId,
       persona,
+      product: study.product,
       input: study.input,
       callbacks: {
         onStep: (step) => mutateSession((s) => void s.steps.push(step)).then(() => undefined),

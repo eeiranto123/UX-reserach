@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { config, isAllowedUrl } from "@/lib/config";
+import { isAllowedUrl } from "@/lib/config";
+import { getProduct, urlPolicy } from "@/lib/products";
 import { createStudy, recoverInterrupted } from "@/lib/runner";
 import { listStudies } from "@/lib/store";
 import { StudyInputSchema } from "@/lib/types";
@@ -14,6 +15,7 @@ export async function GET() {
     studies.map((s) => ({
       id: s.id,
       title: s.input.title,
+      product: s.product?.name,
       targetUrl: s.input.targetUrl,
       status: s.status,
       createdAt: s.createdAt,
@@ -33,18 +35,21 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  if (!isAllowedUrl(parsed.data.targetUrl)) {
+  const product = await getProduct(parsed.data.productId);
+  if (!product) {
+    return NextResponse.json({ error: `Unknown product: ${parsed.data.productId}` }, { status: 400 });
+  }
+  const policy = urlPolicy(product);
+  if (!isAllowedUrl(parsed.data.targetUrl, policy)) {
     return NextResponse.json(
-      {
-        error: `Target host is not allowed. Allowed test hosts: ${config.allowedHosts.join(", ") || "(none configured - set ALLOWED_TARGET_HOSTS)"}`,
-      },
+      { error: `The starting URL is not allowed for ${product.name}. Allowed hosts: ${policy.allowedHosts.join(", ")}` },
       { status: 400 },
     );
   }
   try {
     // Identity header set by the SSO proxy in front of the app (see README).
     const createdBy = req.headers.get("x-forwarded-email") ?? req.headers.get("x-forwarded-user") ?? undefined;
-    const study = await createStudy(parsed.data, createdBy);
+    const study = await createStudy(parsed.data, product, createdBy);
     return NextResponse.json({ id: study.id }, { status: 201 });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 400 });

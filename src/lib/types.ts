@@ -38,12 +38,33 @@ export const PersonaSchema = z.object({
 export type Persona = z.infer<typeof PersonaSchema>;
 
 // ---------------------------------------------------------------------------
+// Products (the site/app being tested)
+// ---------------------------------------------------------------------------
+
+export const ProductSchema = z.object({
+  id: z.string().regex(/^[a-z0-9-]+$/, "id must be kebab-case"),
+  name: z.string(),
+  environment: z.enum(["live", "staging"]),
+  defaultUrl: z.string().url(),
+  /** Hosts the agent may visit for this product (subdomains included). */
+  allowedHosts: z.array(z.string()).min(1),
+  locale: z.string().default("en-US"),
+  timezone: z.string().default("UTC"),
+  /** Case-insensitive URL substrings that are always blocked (checkout, payment...). */
+  blockedUrlPatterns: z.array(z.string()).default([]),
+  notes: z.string().optional(),
+});
+export type Product = z.infer<typeof ProductSchema>;
+
+// ---------------------------------------------------------------------------
 // Study (the task definition) - what the UI submits
 // ---------------------------------------------------------------------------
 
 export const StudyInputSchema = z.object({
-  title: z.string().min(1).max(200),
-  /** Only "url" for now. "figma" (prototype share links) is planned. */
+  productId: z.string().min(1),
+  /** Set by the server: "<date> <product name> synthetic testing". */
+  title: z.string().max(200).default(""),
+  /** Only "url" (live or staging site) for now. "figma" (prototype share links) is planned. */
   targetType: z.literal("url").default("url"),
   targetUrl: z.string().url(),
   /** The scenario as it is read to the participant. */
@@ -144,6 +165,8 @@ export type StudyStatus = "queued" | "running" | "synthesizing" | "completed" | 
 
 export interface Study {
   id: string;
+  /** Snapshot of the product config at creation time. */
+  product: Product;
   createdAt: string;
   createdBy?: string;
   input: StudyInput;

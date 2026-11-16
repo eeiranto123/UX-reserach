@@ -17,12 +17,13 @@ export default async function StudiesPage() {
         <div className="card">
           <table>
             <thead>
-              <tr><th>Study</th><th>Target</th><th>Sessions</th><th>Status</th><th>Created</th></tr>
+              <tr><th>Study</th><th>Product</th><th>Target</th><th>Sessions</th><th>Status</th><th>Created</th></tr>
             </thead>
             <tbody>
               {studies.map((s) => (
                 <tr key={s.id}>
                   <td><Link href={`/studies/${s.id}`}>{s.input.title}</Link></td>
+                  <td>{s.product?.name ?? "–"}</td>
                   <td className="small muted">{new URL(s.input.targetUrl).host}</td>
                   <td>{s.sessions.filter((x) => x.status === "completed").length}/{s.sessions.length}</td>
                   <td><StatusBadge status={s.status} /></td>

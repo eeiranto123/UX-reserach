@@ -1,13 +1,35 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import type { Persona } from "@/lib/types";
+import { useEffect, useState } from "react";
+import { studyTitle } from "@/lib/title";
+import type { Persona, Product } from "@/lib/types";
 
-export function NewStudyForm({ personas, allowedHosts }: { personas: Persona[]; allowedHosts: string[] }) {
+export function NewStudyForm({
+  personas,
+  products,
+  extraHosts,
+}: {
+  personas: Persona[];
+  products: Product[];
+  extraHosts: string[];
+}) {
   const router = useRouter();
+  const [productId, setProductId] = useState(products[0]?.id ?? "");
+  const product = products.find((p) => p.id === productId);
+  const [targetUrl, setTargetUrl] = useState(products[0]?.defaultUrl ?? "");
+  // Filled in after mount so the date comes from the user's clock, not the server render.
   const [title, setTitle] = useState("");
-  const [targetUrl, setTargetUrl] = useState(allowedHosts[0] ? `https://${allowedHosts[0]}/` : "");
+  useEffect(() => {
+    setTitle(product ? studyTitle(product) : "");
+  }, [product]);
+  const allowedHosts = [...(product?.allowedHosts ?? []), ...extraHosts];
+
+  const changeProduct = (id: string) => {
+    setProductId(id);
+    const next = products.find((p) => p.id === id);
+    if (next) setTargetUrl(next.defaultUrl);
+  };
   const [scenario, setScenario] = useState("");
   const [successCriteria, setSuccessCriteria] = useState("");
   const [participantContext, setParticipantContext] = useState("");
@@ -34,7 +56,7 @@ export function NewStudyForm({ personas, allowedHosts }: { personas: Persona[]; 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title,
+          productId,
           targetType: "url",
           targetUrl,
           scenario,
@@ -58,36 +80,58 @@ export function NewStudyForm({ personas, allowedHosts }: { personas: Persona[]; 
   return (
     <form onSubmit={submit}>
       <div className="card">
-        <h2>1. Task</h2>
-        <label className="field">
-          <span>Study title</span>
-          <input type="text" required value={title} onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Switch to annual billing" />
-        </label>
+        <h2>1. Product</h2>
+        <div className="row" style={{ alignItems: "flex-start" }}>
+          <label className="field" style={{ flex: "1 1 240px" }}>
+            <span>Product being tested</span>
+            <select value={productId} onChange={(e) => changeProduct(e.target.value)} required>
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+            {products.length === 0 && <small className="error">No products configured. Add one to the products/ folder.</small>}
+          </label>
+          <div className="field" style={{ flex: "2 1 320px" }}>
+            <span style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>Study name</span>
+            <div className="readonly">{title || "\u00a0"}</div>
+            <small className="muted" style={{ display: "block", marginTop: 3, fontSize: 12.5 }}>
+              Set automatically: date + product + &ldquo;synthetic testing&rdquo;.
+            </small>
+          </div>
+        </div>
+        {product?.environment === "live" && (
+          <div className="banner" style={{ marginBottom: 14 }}>
+            <strong>Live site.</strong> Sessions run against the public {product.name} website. Personas are instructed not to
+            order, pay, register or submit personal details, and checkout/payment URLs are blocked. Synthetic visits may
+            show up in the site&apos;s analytics.
+          </div>
+        )}
         <label className="field">
           <span>Starting URL</span>
           <input type="url" required value={targetUrl} onChange={(e) => setTargetUrl(e.target.value)} />
-          <small>
-            Staging sites only. Allowed hosts: {allowedHosts.length ? allowedHosts.join(", ") : "none configured (set ALLOWED_TARGET_HOSTS)"}
-          </small>
+          <small>Allowed hosts for {product?.name ?? "this product"}: {allowedHosts.join(", ") || "none"}</small>
         </label>
+      </div>
+
+      <div className="card">
+        <h2>2. Task</h2>
         <label className="field">
           <span>Scenario (read to the participant)</span>
           <textarea required value={scenario} onChange={(e) => setScenario(e.target.value)}
-            placeholder="You're paying monthly for your team's plan and your manager asked you to switch to yearly billing to save money. Make the change." />
+            placeholder="You're renovating your bathroom and need waterproofing for the floor. Find a suitable product and check whether it's available at a store near you." />
           <small>Write it like a real usability test: describe the goal, not the clicks.</small>
         </label>
         <label className="field">
           <span>Success criteria (hidden from the participant)</span>
           <textarea value={successCriteria} onChange={(e) => setSuccessCriteria(e.target.value)}
-            placeholder="The billing page shows 'Annual' as the selected plan, or the confirmation screen for the change is reached." />
+            placeholder="A waterproofing product page is open and store availability has been checked." />
           <small>Used by a separate evaluator to judge whether each session succeeded.</small>
         </label>
         <label className="field">
           <span>Information for the participant (optional)</span>
           <textarea value={participantContext} onChange={(e) => setParticipantContext(e.target.value)}
-            placeholder="Test login: ux-test-1@example.com / (staging test password)" />
-          <small>Only use staging test accounts. Never enter real customer or personal data.</small>
+            placeholder="e.g. You live in Tampere." />
+          <small>Never include real customer data or real credentials.</small>
         </label>
         <label className="field">
           <span>Post-task questions (one per line)</span>
@@ -96,7 +140,7 @@ export function NewStudyForm({ personas, allowedHosts }: { personas: Persona[]; 
       </div>
 
       <div className="card">
-        <h2>2. Participants</h2>
+        <h2>3. Participants</h2>
         {personas.length === 0 ? (
           <p className="muted">No personas found. Add JSON files to the <code>personas/</code> folder.</p>
         ) : (
@@ -142,7 +186,7 @@ export function NewStudyForm({ personas, allowedHosts }: { personas: Persona[]; 
 
       {error && <p className="error">{error}</p>}
       <div className="row">
-        <button type="submit" disabled={submitting || selected.length === 0}>
+        <button type="submit" disabled={submitting || selected.length === 0 || !product}>
           {submitting ? "Starting…" : `Run study (${sessionCount} session${sessionCount === 1 ? "" : "s"})`}
         </button>
       </div>
