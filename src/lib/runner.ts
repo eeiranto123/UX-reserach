@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { runPersonaSession } from "./agent";
 import { config } from "./config";
 import { getPersona } from "./personas";
-import { studyTitle } from "./title";
+import { studyDate, studyTitle } from "./title";
 import { listStudies, loadStudy, saveStudy, updateStudy } from "./store";
 import { synthesizeStudy } from "./synthesis";
 import type { Product, Session, Study, StudyInput } from "./types";
@@ -22,9 +22,29 @@ const g = globalThis as unknown as {
 };
 const queue = (g.__uxrQueue ??= { pending: [], active: 0, recovered: false });
 
-export async function createStudy(input: StudyInput, product: Product, createdBy?: string): Promise<Study> {
+/** Next sequential test number for `product` on today's date (in the product's timezone). */
+export async function nextRunNumber(product: Product, now = new Date()): Promise<number> {
+  const today = studyDate(product, now);
+  const studies = await listStudies();
+  const sameDay = studies.filter(
+    (s) => (s.product?.id ?? s.input.productId) === product.id && studyDate(product, new Date(s.createdAt)) === today,
+  );
+  return sameDay.reduce((max, s) => Math.max(max, s.runNumber ?? 0), 0) + 1;
+}
+
+// Study creation is serialised so two studies can't get the same run number.
+let creating: Promise<unknown> = Promise.resolve();
+
+export function createStudy(input: StudyInput, product: Product, createdBy?: string): Promise<Study> {
+  const next = creating.then(() => doCreateStudy(input, product, createdBy));
+  creating = next.catch(() => undefined);
+  return next;
+}
+
+async function doCreateStudy(input: StudyInput, product: Product, createdBy?: string): Promise<Study> {
   const now = new Date();
-  input = { ...input, productId: product.id, title: studyTitle(product, now) };
+  const runNumber = await nextRunNumber(product, now);
+  input = { ...input, productId: product.id, title: studyTitle(product, runNumber, now) };
   const sessions: Session[] = [];
   for (const personaId of input.personaIds) {
     const persona = await getPersona(personaId);
@@ -44,6 +64,7 @@ export async function createStudy(input: StudyInput, product: Product, createdBy
   const study: Study = {
     id: `${new Date().toISOString().slice(0, 10)}-${randomUUID().slice(0, 8)}`,
     createdAt: now.toISOString(),
+    runNumber,
     createdBy,
     product,
     input,

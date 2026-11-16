@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import type { Session, Study } from "@/lib/types";
 import { StatusBadge } from "./StatusBadge";
+import { TASK_TEMPLATES } from "@/lib/tasks";
+
+const TASK_LABELS = Object.fromEntries(TASK_TEMPLATES.map((t) => [t.id, t.label]));
 
 const ACTIVE = ["queued", "running", "synthesizing"];
 
@@ -48,7 +51,7 @@ export function StudyView({ initial }: { initial: Study }) {
       </p>
 
       <div className="card">
-        <h3>Scenario</h3>
+        <h3>Scenario{study.input.task ? <span className="muted small"> · {TASK_LABELS[study.input.task.templateId] ?? study.input.task.templateId}</span> : null}</h3>
         <p style={{ marginTop: 0 }}>{study.input.scenario}</p>
         {study.input.successCriteria && (
           <p className="small muted" style={{ marginBottom: 0 }}>Success criteria: {study.input.successCriteria}</p>

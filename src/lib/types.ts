@@ -60,10 +60,38 @@ export type Product = z.infer<typeof ProductSchema>;
 // Study (the task definition) - what the UI submits
 // ---------------------------------------------------------------------------
 
+/**
+ * Minimal input: productId, task (template + its fields) and personaIds.
+ * Everything else is optional and filled from the product/template defaults.
+ */
+export const StudyRequestSchema = z.object({
+  productId: z.string().min(1),
+  task: z.object({
+    templateId: z.string().min(1),
+    fields: z.record(z.string(), z.string().max(4000)).default({}),
+  }),
+  personaIds: z.array(z.string()).min(1).max(10),
+  // --- optional overrides (the "Advanced options" in the UI) ---
+  targetUrl: z.string().url().optional(),
+  /** Overrides the scenario generated from the template. */
+  scenario: z.string().max(4000).optional(),
+  /** Overrides the success criteria generated from the template. */
+  successCriteria: z.string().max(2000).optional(),
+  participantContext: z.string().max(2000).optional(),
+  postTaskQuestions: z.array(z.string().min(1).max(500)).max(10).optional(),
+  runsPerPersona: z.number().int().min(1).max(5).optional(),
+  maxSteps: z.number().int().min(5).max(60).optional(),
+});
+export type StudyRequest = z.infer<typeof StudyRequestSchema>;
+
+/** The fully resolved study definition stored with each study. */
 export const StudyInputSchema = z.object({
   productId: z.string().min(1),
-  /** Set by the server: "<date> <product name> synthetic testing". */
+  /** Set by the server: "<date> <product name> synthetic testing #<run>". */
   title: z.string().max(200).default(""),
+  task: z
+    .object({ templateId: z.string(), fields: z.record(z.string(), z.string()) })
+    .optional(),
   /** Only "url" (live or staging site) for now. "figma" (prototype share links) is planned. */
   targetType: z.literal("url").default("url"),
   targetUrl: z.string().url(),
@@ -165,6 +193,8 @@ export type StudyStatus = "queued" | "running" | "synthesizing" | "completed" | 
 
 export interface Study {
   id: string;
+  /** Sequential test number for this product on this date (1, 2, 3…). */
+  runNumber?: number;
   /** Snapshot of the product config at creation time. */
   product: Product;
   createdAt: string;

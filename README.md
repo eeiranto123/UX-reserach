@@ -24,8 +24,13 @@ Next.js UI ──► API routes ──► job queue (in-process, N parallel sess
 - **Products**: JSON files in [`products/`](products/README.md) (currently K-Rauta). Each product defines its allowed
   hosts, browser locale, live/staging environment and blocked URL patterns (checkout, payment).
 - **Personas**: JSON files in [`personas/`](personas/README.md), versioned in git.
-- **Study**: named automatically as `YYYY-MM-DD <Product> synthetic testing`, e.g. `2026-11-16 K-Rauta synthetic testing`
-  (date in the product's timezone). A study is a task definition: product, starting URL, scenario, hidden success criteria, participant info (e.g. a staging test
+- **Task templates** (`src/lib/tasks.ts`): ready-made e-commerce tasks: *Find a product*, *Compare and choose*,
+  *Check availability & delivery*, *Add to cart*, *Find information*, plus *Custom task*. The user fills in only the
+  required field(s), usually what the shopper is looking for. The template writes the participant scenario, hidden
+  success criteria and action limit. All of these can be changed under "Advanced options".
+- **Study**: named automatically as `YYYY-MM-DD <Product> synthetic testing #<n>`, e.g.
+  `2026-11-16 K-Rauta synthetic testing #2`, where `n` counts that product's studies on that date (date in the
+  product's timezone). A study is a task definition: product, starting URL, scenario, hidden success criteria, participant info (e.g. a staging test
   login), post-task questions, personas, runs per persona and an action limit.
 - **Agent** (`src/lib/agent.ts`): each turn the persona sees a screenshot plus a numbered list of interactive elements,
   then takes one action. Every action includes a first-person `thought`. The session ends when the persona calls
@@ -74,6 +79,21 @@ Open http://localhost:3000.
 
 Model calls use adaptive thinking, prompt caching, server-side refusal fallback (`fallbacks: "default"`) and
 server-side clearing of old screenshots once a session's context grows, so long sessions stay affordable.
+
+## API
+
+Only the product, task and personas are required; everything else defaults from the template and product.
+
+```bash
+curl -X POST http://localhost:3000/api/studies -H 'content-type: application/json' -d '{
+  "productId": "k-rauta",
+  "task": { "templateId": "availability", "fields": { "item": "a cordless drill", "location": "Tampere" } },
+  "personaIds": ["draft-busy-operations-manager"]
+}'
+```
+
+Optional overrides: `targetUrl`, `scenario`, `successCriteria`, `participantContext`, `postTaskQuestions`,
+`runsPerPersona`, `maxSteps`. The schema is `StudyRequestSchema` in `src/lib/types.ts`.
 
 ## Deploying for the company (next steps)
 
